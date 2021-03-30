@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cmath>
+#include <tuple>
 #include <windows.h>
 #include <TlHelp32.h>
 #include <processthreadsapi.h>
@@ -62,9 +63,25 @@ DWORD FindPID(const std::wstring& modName)
     return 0;
 }
 
+std::tuple<float, float> CalcAngle(Vec3 src, Vec3 dst)
+{
+    RelativePos.x = dst.x - src.x;
+    RelativePos.y = dst.y - src.y;
+    RelativePos.z = dst.z = src.z;
+
+    const float hypotenuse = sqrt(pow(RelativePos.x, 2) + pow(RelativePos.y, 2) + pow(RelativePos.z, 2));
+
+    float yaw = (atan2(RelativePos.y, RelativePos.x) * (180 / M_PI)) + 90;
+    float pitch = atan2(RelativePos.z, hypotenuse) * (180 / M_PI);
+
+    //std::cout << yaw << std::endl;
+
+    return std::make_tuple(yaw, pitch);
+}
+
 int main()
 {
-    EnemyPos = { 161, 158, 20 };
+    EnemyPos = { 148.811, 133.16, 3.5 };
 
     DWORD procID = FindPID(L"ac_client.exe");
     std::cout << "PID: " << procID << std::endl;
@@ -80,18 +97,12 @@ int main()
     std::cout << "LocalPlayer Base Address: 0x" << std::hex << LocalPlayer << std::endl;
 
     while (true) {
-        // Read x,y,z head pos of local player
+        // Read x,y,z head pos of local playe^r
         ReadProcessMemory(hProcess, (LPCVOID)(LocalPlayer + 0x0004), &HeadPos, sizeof(HeadPos), nullptr);
+        //std::cout << HeadPos.x << " / " << HeadPos.y << " / " << HeadPos.z << std::endl;
 
-        // Transform enemy pos to make head pos relative to origin
-        RelativePos.x = EnemyPos.x - HeadPos.x;
-        RelativePos.y = EnemyPos.y - HeadPos.y;
-        RelativePos.z = EnemyPos.z - HeadPos.z;
-
-        const float hypotenuse = sqrt(pow(RelativePos.x, 2) + pow(RelativePos.y, 2) + pow(RelativePos.z, 2));
-        
-        const float yaw = (atan2(RelativePos.y, RelativePos.x) * 180/M_PI) + 90;
-        const float pitch = atan2(RelativePos.z, hypotenuse) * 180/M_PI;
+        float yaw, pitch;
+        std::tie(yaw, pitch) = CalcAngle(HeadPos, EnemyPos);
 
         WriteProcessMemory(hProcess, (LPVOID)(LocalPlayer + 0x0040), &yaw, sizeof(yaw), nullptr);
         WriteProcessMemory(hProcess, (LPVOID)(LocalPlayer + 0x0044), &pitch, sizeof(pitch), nullptr);
