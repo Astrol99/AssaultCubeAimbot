@@ -65,12 +65,14 @@ DWORD FindPID(const std::wstring& modName)
 
 std::tuple<float, float> CalcAngle(Vec3 src, Vec3 dst)
 {
+    // Get relative dst pos by making src pos origin
     RelativePos.x = dst.x - src.x;
     RelativePos.y = dst.y - src.y;
     RelativePos.z = dst.z - src.z;
 
     const float hypotenuse = sqrt(pow(RelativePos.x, 2) + pow(RelativePos.y, 2) + pow(RelativePos.z, 2));
 
+    // Use trig to find correct degrees
     float yaw = (atan2(RelativePos.y, RelativePos.x) * (180 / M_PI)) + 90;
     float pitch = atan2(RelativePos.z, hypotenuse) * (180 / M_PI);
 
@@ -92,7 +94,6 @@ int main()
     ReadProcessMemory(hProcess, (LPCVOID)(moduleBase + 0x10F4F4), &LocalPlayer, sizeof(LocalPlayer), nullptr);
     std::cout << "LocalPlayer Base Address: 0x" << std::hex << LocalPlayer << std::endl;
 
-    EnemyPos = { 140, 152, 4.5 };
 
     while (true) {
         // Read x,y,z head pos of local player
