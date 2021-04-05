@@ -4,12 +4,9 @@
 #include <windows.h>
 #include <TlHelp32.h>
 #include <processthreadsapi.h>
+#include "structs.h"
 
 #define M_PI 3.14159265358979323846264338327950288
-
-struct Vec3 {
-    float x, y, z;
-} HeadPos, EnemyPos, RelativePos;
 
 uintptr_t GetModuleBaseAddr(DWORD procID, const wchar_t* modName)
 {
@@ -63,18 +60,21 @@ DWORD FindPID(const std::wstring& modName)
     return 0;
 }
 
-std::tuple<float, float> CalcAngle(Vec3 src, Vec3 dst)
+float dist(Vec3 src, Vec3 dst)
 {
     // Get relative dst pos by making src pos origin
     RelativePos.x = dst.x - src.x;
     RelativePos.y = dst.y - src.y;
     RelativePos.z = dst.z - src.z;
 
-    const float hypotenuse = sqrt(pow(RelativePos.x, 2) + pow(RelativePos.y, 2) + pow(RelativePos.z, 2));
+    return sqrt(pow(RelativePos.x, 2) + pow(RelativePos.y, 2) + pow(RelativePos.z, 2));
+}
 
+std::tuple<float, float> CalcAngle(Vec3 src, Vec3 dst)
+{
     // Use trig to find correct degrees
     float yaw = (atan2(RelativePos.y, RelativePos.x) * (180 / M_PI)) + 90;
-    float pitch = atan2(RelativePos.z, hypotenuse) * (180 / M_PI);
+    float pitch = atan2(RelativePos.z, dist(src, dst)) * (180 / M_PI);
 
     return std::make_tuple(yaw, pitch);
 }
@@ -94,14 +94,35 @@ int main()
     ReadProcessMemory(hProcess, (LPCVOID)(moduleBase + 0x10F4F4), &LocalPlayer, sizeof(LocalPlayer), nullptr);
     std::cout << "LocalPlayer Base Address: 0x" << std::hex << LocalPlayer << std::endl;
 
+	uintptr_t EntityListAddr;
+	ReadProcessMemory(hProcess, (LPCVOID)(moduleBase + 0x10F4F8), &EntityListAddr, sizeof(EntityListAddr), nullptr);
+	std::cout << "EntityList Address: 0x" << std::hex << EntityListAddr << std::endl;
 
-    while (true) {
+    const int PlayerNum = 8;
+
+    Vec3 ClosestPos = { 100000,100000,100000 };
+
+    while (true) 
+	{
         // Read x,y,z head pos of local player
         ReadProcessMemory(hProcess, (LPCVOID)(LocalPlayer + 0x0004), &HeadPos, sizeof(HeadPos), nullptr);
-        //std::cout << HeadPos.x << " / " << HeadPos.y << " / " << HeadPos.z << std::endl;
+        
+        // Loop through half of entitylist for only enemy entites
+        for (int i = 1; i <= PlayerNum/2 ; i++)
+        {
+            uintptr_t EntityAddr;
+            ReadProcessMemory(hProcess, (LPCVOID)(EntityListAddr + (0x4*i)), &EntityAddr, sizeof(EntityAddr), nullptr);
+
+            Vec3 pos;
+            ReadProcessMemory(hProcess, (LPCVOID)(EntityAddr + 0x4), &pos, sizeof(pos), nullptr);
+
+            // Only get closest enemy headpos
+            if (dist(HeadPos, pos) < dist(HeadPos, ClosestPos))
+                ClosestPos = pos;
+        }
 
         float yaw, pitch;
-        std::tie(yaw, pitch) = CalcAngle(HeadPos, EnemyPos);
+        std::tie(yaw, pitch) = CalcAngle(HeadPos, ClosestPos);
 
         WriteProcessMemory(hProcess, (LPVOID)(LocalPlayer + 0x0040), &yaw, sizeof(yaw), nullptr);
         WriteProcessMemory(hProcess, (LPVOID)(LocalPlayer + 0x0044), &pitch, sizeof(pitch), nullptr);
